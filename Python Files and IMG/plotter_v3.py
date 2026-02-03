@@ -39,6 +39,10 @@ class AirfoilsPlotterWidget(QWidget):
         self.min_y = None
         self.vertical_distance = None
 
+        self.advanced_view = False  # inizialmente off
+        self.advanced_labels = []   # lista per tenere traccia dei TextItem
+
+
         # Layout principale
         self.main_layout = QVBoxLayout(self)
         self.main_layout.setContentsMargins(5,5,5,5)
@@ -129,6 +133,12 @@ class AirfoilsPlotterWidget(QWidget):
         self.reset_btn.setCursor(QCursor(Qt.PointingHandCursor))
         self.reset_btn.clicked.connect(self.reset_parameters)
         buttons_layout.addWidget(self.reset_btn)
+
+        self.view_export_btn = QPushButton("Visualizzazione Avanzata")
+        self.view_export_btn.setStyleSheet(button_style("#FF5722","#F4511E"))
+        self.view_export_btn.setCursor(QCursor(Qt.PointingHandCursor))
+        self.view_export_btn.clicked.connect(self.toggle_advanced_view)
+        self.control_layout.addWidget(self.view_export_btn)
 
         self.control_layout.addLayout(buttons_layout)
 
@@ -306,3 +316,26 @@ class AirfoilsPlotterWidget(QWidget):
                 min_dist=dist
                 split_index=i
         return points[:split_index], points[split_index:]
+
+    def toggle_advanced_view(self):
+        if self.points is None:
+            return
+
+        if not self.advanced_view:
+            # MOSTRA numerazione punti
+            self.advanced_labels = []  # reset lista
+            for idx, (x, y) in enumerate(self.points, start=1):
+                text = f"{idx}\n({x:.3f}, {y:.3f})"
+                label = pg.TextItem(text, anchor=(0,1), color='w')
+                label.setFont(QFont("Arial", 8))
+                label.setPos(x, y)
+                self.plot_widget.addItem(label)
+                self.advanced_labels.append(label)
+
+            self.advanced_view = True
+        else:
+            # NASCONDI numerazione punti
+            for label in self.advanced_labels:
+                self.plot_widget.removeItem(label)
+            self.advanced_labels = []
+            self.advanced_view = False
