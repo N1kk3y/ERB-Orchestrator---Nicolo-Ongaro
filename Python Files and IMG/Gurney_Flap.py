@@ -107,11 +107,15 @@ class AirfoilsPlotterWidget(QWidget):
 
         # Slider per lato verticale Punto2
         self.slider = QSlider(Qt.Horizontal)
-        self.slider.setRange(2, 50)
+        self.slider.setRange(0, 50)
         self.slider.setValue(10)
         self.slider.valueChanged.connect(self.update_gurney)
-        self.control_layout.addWidget(QLabel("Estendi lato Punto2"))
+        self.control_layout.addWidget(QLabel("Estendi lato del Gurney"))
         self.control_layout.addWidget(self.slider)
+
+        self.angle_entry = self.create_labeled_entry("Angolo Gurney (°):", "0.0")
+        self.angle_entry.textChanged.connect(self.update_gurney)
+
 
         # Interpola gurney
         self.interpolation_entry = self.create_labeled_entry("Interpolazione:", "10")
@@ -252,6 +256,15 @@ class AirfoilsPlotterWidget(QWidget):
         if self.idx_p1 is not None and self.idx_p2 is not None:
             self.interpolate_profile()
 
+
+    def rotate_vector(self, v, angle_deg):
+        a = np.deg2rad(angle_deg)
+        R = np.array([
+            [np.cos(a), -np.sin(a)],
+            [np.sin(a),  np.cos(a)]
+        ])
+        return R @ v
+
     def interpolate_profile(self):
         """Estrae Punto TE, Punto 2 e l'array dei 50 punti del profilo."""
         i1, i2 = sorted([self.idx_p1, self.idx_p2])
@@ -306,7 +319,20 @@ class AirfoilsPlotterWidget(QWidget):
         n = np.array([-vec_TE[1], vec_TE[0]])
         n /= np.linalg.norm(n)
 
-        top_pts = np.array(base_pts) + n*h
+        # forza verso -Y (come prima)
+        if n[1] > 0:
+            n = -n
+
+        # angolo gurney
+        try:
+            angle = float(self.angle_entry.text())
+        except:
+            angle = 0.0
+
+        n = self.rotate_vector(n, angle)
+
+
+        top_pts = np.array(base_pts) + n*(h*-1)
 
         self.gurney_items.append(pg.PlotDataItem([p[0] for p in base_pts], [p[1] for p in base_pts], pen=pg.mkPen('r', width=2)))
         self.gurney_items.append(pg.PlotDataItem([p[0] for p in top_pts], [p[1] for p in top_pts], pen=pg.mkPen('r', width=2)))
@@ -337,7 +363,18 @@ class AirfoilsPlotterWidget(QWidget):
         vec_TE = self.points[self.idx_p2] - self.points[self.idx_p1]
         n = np.array([-vec_TE[1], vec_TE[0]])
         n /= np.linalg.norm(n)
-        top_pts = np.array(base_pts) + n*h
+
+        if n[1] > 0:
+            n = -n
+
+        try:
+            angle = float(self.angle_entry.text())
+        except:
+            angle = 0.0
+
+        n = self.rotate_vector(n, angle)
+
+        top_pts = np.array(base_pts) + n*(h*-1)
 
         left_side = np.array([base_pts[0], top_pts[0]])
         right_side = np.array([base_pts[-1], top_pts[-1]])
@@ -366,36 +403,78 @@ class AirfoilsPlotterWidget(QWidget):
         self.plot_widget.addItem(self.interp_gurney_item)
         
         return self.gurney_interp_points
+    
+
 
     def export_profile_with_gurney(self):
-        """Mostra a terminale tutti i dati estratti e salvati."""
-        print("\n" + "="*50)
-        print("DEBUG: DATI SALVATI NEL SISTEMA")
-        print("="*50)
+        if self.file_path is None or self.idx_p1 is None or self.idx_p2 is None:
+            print("File non caricato o punti non selezionati.")
+            return
 
-        # 1) Array coordinate totali dal file
-        if self.all_coordinates is not None:
-            print(f"1) Coordinate totali (da file): {len(self.all_coordinates)} punti caricati.")
-            print(f"   Esempio prime 2 righe: \n{self.all_coordinates[:2]}")
-        else:
-            print("1) Coordinate totali: NESSUN FILE CARICATO")
+        # 1) Prendo tutti i punti originali fino a Punto 2 incluso scansionando l'array
+        points_up_to_p2 = []
+        for pt in self.all_coordinates:
+            points_up_to_p2.append(pt)
+            # Se questo punto è Punto 2, interrompo
+            if np.allclose(pt, self.all_coordinates[self.idx_p2], atol=1e-12):
+                break
 
-        print("-" * 30)
+        # 2) Prendo tutti i punti verdi fino alla slider position
+        green_points = []
+        slider_count = 50 - self.slider_pos_idx
+        print(self.slider_pos_idx)
+        if len(self.slider_points_50) > 0 and slider_count > 0:
+            green_points = self.slider_points_50[:slider_count].tolist()
+            # Elimino il primo punto per evitare duplicati con l'ultimo del profilo originale
+            if green_points:
+                green_points.pop(0)
 
-        # 2) Parametri estratti dalla logica Gurney
-        print(f"2) Punto TE (P1): {self.point_te}")
-        print(f"3) Punto 2 (P2): {self.point_2}")
-        print(f"4) Posizione Slider (Indice): {self.slider_pos_idx}")
-        
-        if self.slider_points_50 is not None and len(self.slider_points_50) > 0:
-            print(f"5) Array 50 punti profilo: {len(self.slider_points_50)} punti generati.")
-        else:
-            print("5) Array 50 punti profilo: NON ANCORA GENERATO")
+        # 3) Lista finale dei punti: originale + verdi + Gurney + TE
+        final_points_list = []
 
-        if len(self.gurney_interp_points) > 0:
-            print(f"6) Array Gurney interpolato: {len(self.gurney_interp_points)} punti calcolati.")
-            print(f"   Ultimo punto Gurney: {self.gurney_interp_points[-1]}")
-        else:
-            print("6) Array Gurney interpolato: NON ANCORA GENERATO (clicca 'Genera punti interpolati')")
+        def add_point(pt):
+            """Aggiunge il punto solo se è diverso dall'ultimo aggiunto"""
+            if len(final_points_list) == 0 or not np.allclose(pt, final_points_list[-1], atol=1e-12):
+                final_points_list.append(pt)
 
-        print("="*50 + "\n")
+        # Aggiungo punti originali fino a Punto 2 incluso
+        for pt in points_up_to_p2:
+            add_point(pt)
+
+        # Aggiungo punti verdi
+        for pt in green_points:
+            add_point(pt)
+
+        # Aggiungo punti Gurney
+        for pt in self.gurney_interp_points.tolist():
+            add_point(pt)
+
+        # Aggiungo Punto TE finale
+        add_point(self.point_te.tolist())
+
+        # 4) Dialog per salvare file
+        base_name = os.path.splitext(os.path.basename(self.file_path))[0]
+        try:
+            angle = float(self.angle_entry.text())
+        except:
+            angle = 0.0
+
+        save_path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Salva profilo con Gurney",
+            f"{base_name}_gurney_{angle:.1f}deg.txt",
+            "TXT Files (*.txt)"
+        )
+        if not save_path:
+            return
+
+        # 5) Scrittura file con formattazione originale
+        with open(save_path, 'w') as f:
+            f.write("#Group   Point  X_cord          Y_cord          Z_cord\n")
+            for idx, pt in enumerate(final_points_list, start=1):
+                x_str = f"{pt[0]:.9f}".replace('.', ',')
+                y_str = f"{pt[1]:.9f}".replace('.', ',')
+                f.write(f"1        {idx:<3}    {x_str:<15} {y_str:<15} 0\n")
+
+        print(f"File salvato correttamente: {save_path}")
+
