@@ -1351,5 +1351,15 @@
     return true;
   }
 
+
+  window.loadProfileFromPython = function(filename, content) {
+      var points = parseCoordsTxt(content);
+      state.pendingFile = { name: filename, content: content, points: points };
+      // Piccolo delay per assicurarsi che il focus sia tornato alla pagina
+      setTimeout(function() {
+          openImportModal();
+      }, 100);
+  };
+
   init();
 })();
