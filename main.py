@@ -186,7 +186,7 @@ class AppLauncher(QWidget):
 
         self.pages.addWidget(self.menu_page)
 
-        version_label = QLabel("Versione 6.3.1")
+        version_label = QLabel("Versione 6.7.2")
         version_label.setAlignment(Qt.AlignRight)
         version_label.setStyleSheet("color: gray; font-size: 10px;")
         self.main_layout.addWidget(version_label)
@@ -388,7 +388,7 @@ class AppLauncher(QWidget):
 
 # --- MAIN ---
 if __name__ == "__main__":
-    check_for_update.local_tag = "v6.3.1"
+    check_for_update.local_tag = "v6.7.2"
     from PyQt5.QtCore import Qt
     QApplication.setAttribute(Qt.AA_ShareOpenGLContexts)
     app = QApplication(sys.argv)

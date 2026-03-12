@@ -24,6 +24,15 @@ def get_button_style(color, hover_color):
         }}
     """
 
+def resource_path(relative_path):
+    """ Ottiene il percorso assoluto delle risorse, compatibile con PyInstaller """
+    try:
+        base_path = getattr(sys, '_MEIPASS', os.path.abspath("."))
+    except Exception:
+        base_path = os.path.abspath(".")
+    return os.path.join(base_path, relative_path)
+
+
 def get_toggle_style(active=False):
     if active:
         return get_button_style("#4CAF50", "#45A049") # Verde
@@ -37,8 +46,8 @@ class FusionConverterWidget(QWidget):
         self.last_output_file = None
         self.output_folder = None
         
-        # DEFAULT: Profilo Chiuso (come da tua logica Fusion)
-        self.profile_open = False  
+        
+        self.profile_open = True  
         self.selected_file_path = None 
 
         self.setWindowTitle("Fusion 360 TXT Converter")
@@ -71,7 +80,7 @@ class FusionConverterWidget(QWidget):
         # --- Riga Profilo Aperto ---
         self.open_row_layout = QHBoxLayout()
         self.open_img_label = QLabel()
-        open_pix = QPixmap("Aperto.png")
+        open_pix = QPixmap(resource_path("Aperto.png"))
         if not open_pix.isNull():
             self.open_img_label.setPixmap(open_pix)
             self.open_img_label.setScaledContents(True)
@@ -94,7 +103,7 @@ class FusionConverterWidget(QWidget):
         # --- Riga Profilo Chiuso ---
         self.close_row_layout = QHBoxLayout()
         self.close_img_label = QLabel()
-        close_pix = QPixmap("Chiuso.png")
+        close_pix = QPixmap(resource_path("Chiuso.png"))
         if not close_pix.isNull():
             self.close_img_label.setPixmap(close_pix)
             self.close_img_label.setScaledContents(True)
